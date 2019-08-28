@@ -35,12 +35,8 @@ func (a AppContext) inject() AppContext {
 					split := strings.Split(p, ":")
 					path := split[0]
 					def := ""
-					if len(split) > 2 {
-						panic("Invalid property injection")
-					}
-
-					if len(split) == 2 {
-						def = split[1]
+					if len(split) > 1 {
+						def = strings.Join(split[1:], ":")
 					}
 
 					genes := a.GetGene()

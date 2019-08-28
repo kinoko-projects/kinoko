@@ -29,6 +29,14 @@ func (g Gene) get(path string) interface{} {
 	return nil
 }
 
+func (g Gene) GetMap(path string) map[interface{}]interface{} {
+	if v := g.get(path); v != nil {
+		return v.(map[interface{}]interface{})
+	} else {
+		panic("miss config: " + path)
+	}
+}
+
 func (g Gene) GetInt(path string) int {
 	if v := g.get(path); v != nil {
 		return v.(int)
