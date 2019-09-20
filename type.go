@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-type SporeType string
+type SporeType = string
 
 var logger = NewLogger("Kinoko Application")
 
@@ -20,11 +20,11 @@ func checkInterface(i interface{}) {
 func getType(i interface{}) SporeType {
 	checkInterface(i)
 	t := reflect.TypeOf(i).Elem()
-	return SporeType(t.PkgPath() + ":" + t.Name())
+	return SporeType(t.PkgPath() + "." + t.Name())
 }
 
-//NamedType("pkg/pkg", "type") => "pkg/pkg:type"
-//NamedType("pkg/pkg:type") => "pkg/pkg:type"
+//NamedType("pkg/pkg", "type") => "pkg/pkg.type"
+//NamedType("pkg/pkg:type") => "pkg/pkg.type"
 //hard-coded not recommended
 func NamedType(n ...string) SporeType {
 	s := ""
@@ -34,7 +34,7 @@ func NamedType(n ...string) SporeType {
 	for i := 0; i < len(n)-1; i++ {
 		s += n[i]
 	}
-	return SporeType(s + ":" + n[len(n)-1])
+	return SporeType(s + "." + n[len(n)-1])
 }
 
 //Recommended way to acquire a spore type

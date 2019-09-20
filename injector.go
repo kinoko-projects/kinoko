@@ -5,12 +5,11 @@ import (
 	"strings"
 )
 
-type AppContextInjector interface {
-	inject() AppContext
-}
-
-func (a AppContext) inject() AppContext {
+func (a *AppContext) inject() *AppContext {
 	for _, spore := range a.spores {
+		if !spore.v { //skip unqualified spore
+			continue
+		}
 		tDst := reflect.TypeOf(spore.i).Elem()
 		vDst := reflect.ValueOf(spore.i).Elem()
 		for i := 0; i < tDst.NumField(); i++ {
@@ -27,8 +26,12 @@ func (a AppContext) inject() AppContext {
 					s := a.GetSpore(NamedType(t.Elem().PkgPath(), t.Elem().Name()))
 
 					if s == nil {
+						if t.Kind() != reflect.Interface {
+							panic("No spore implements interface: " + t.String())
+						}
 						s = a.GetImplementedSpore(t)
 					}
+
 					vDst.Field(i).Set(reflect.ValueOf(s))
 
 				} else { //properties injection and override
