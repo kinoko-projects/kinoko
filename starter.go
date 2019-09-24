@@ -23,7 +23,7 @@ func (a *AppContext) startApplication() {
 	}
 	starters := make([]OrderedStarter, 0)
 	for _, s := range a.spores {
-		if starter, ok := s.i.(Starter); s.v && ok {
+		if starter, ok := s.i.(Starter); s.s == Valid && ok {
 			orderedStarter := OrderedStarter{}
 			orderedStarter.starter = starter
 
@@ -56,16 +56,16 @@ func (a *AppContext) verifySpores() {
 		if v, ok := s.i.(Conditional); ok {
 			condition := newCondition()
 			v.Condition(condition)
-			s.v = a.verifyCondition(condition)
+			s.s = a.verifyCondition(s, condition)
 		} else {
-			s.v = true
+			s.s = Valid
 		}
 	}
 }
 
 func (a *AppContext) initializeSpores() {
 	for _, s := range a.spores {
-		if v, ok := s.i.(Initializer); ok && s.v {
+		if v, ok := s.i.(Initializer); ok && s.s == Valid {
 			e := v.Initialize()
 			if e != nil {
 				panic(e)

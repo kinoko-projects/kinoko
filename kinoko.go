@@ -3,9 +3,11 @@ package kinoko
 import (
 	"context"
 	"reflect"
+	"sync"
 )
 
 type AppContext struct {
+	sync.Mutex
 	spores     []*Spore
 	gene       []Gene
 	context    context.Context
@@ -15,7 +17,7 @@ type AppContext struct {
 //Get a spore with specific type
 func (a *AppContext) GetSpore(t SporeType) interface{} {
 	for _, s := range a.spores {
-		if s.v && s.t == t {
+		if s.s == Valid && s.t == t {
 			return s.i
 		}
 	}
@@ -26,7 +28,7 @@ func (a *AppContext) GetSpore(t SporeType) interface{} {
 func (a *AppContext) GetImplementedSpore(t interface{}) interface{} {
 	var i interface{} = nil
 	for _, s := range a.spores {
-		if s.v && reflect.TypeOf(s.i).Implements(reflect.TypeOf(t).Elem()) {
+		if s.s == Valid && reflect.TypeOf(s.i).Implements(reflect.TypeOf(t).Elem()) {
 			i = s.i
 		}
 	}
@@ -37,7 +39,11 @@ func (a *AppContext) GetImplementedSpore(t interface{}) interface{} {
 func (a *AppContext) Use(i ...interface{}) *AppContext {
 	spores := make([]*Spore, len(i))
 	for j := range i {
-		spores[j] = &Spore{i: i[j], t: getType(i[j])}
+		if _, ok := i[j].(Conditional); ok {
+			spores[j] = &Spore{i: i[j], t: getType(i[j]), s: Unknown}
+		} else {
+			spores[j] = &Spore{i: i[j], t: getType(i[j]), s: Valid}
+		}
 	}
 	a.spores = append(a.spores, spores...)
 	return a
@@ -47,7 +53,7 @@ func (a *AppContext) Use(i ...interface{}) *AppContext {
 func (a *AppContext) GetSpores(t SporeType) []interface{} {
 	is := make([]interface{}, 0)
 	for _, s := range a.spores {
-		if s.v && s.t == t {
+		if s.s == Valid && s.t == t {
 			is = append(is, s.i)
 		}
 	}
@@ -58,21 +64,39 @@ func (a *AppContext) GetSpores(t SporeType) []interface{} {
 func (a *AppContext) GetImplementedSpores(t interface{}) []interface{} {
 	is := make([]interface{}, 0)
 	for _, s := range a.spores {
-		if s.v && reflect.TypeOf(s.i).Implements(reflect.TypeOf(t).Elem()) {
+		if s.s == Valid && reflect.TypeOf(s.i).Implements(reflect.TypeOf(t).Elem()) {
 			is = append(is, s.i)
 		}
 	}
 	return is
 }
 
-func (a *AppContext) verifyCondition(condition *Condition) bool {
+func (a *AppContext) verifyCondition(spore *Spore, condition *Condition) SporeStatus {
+
+	if spore.s == Calculating {
+		panic("Recursive condition on " + spore.t)
+	}
+
+	if spore.s != Unknown {
+		return spore.s
+	} else {
+		spore.s = Calculating
+	}
 	if len(condition.onMissing) > 0 {
 		for _, c := range condition.onMissing {
 			switch c.(type) {
 			case SporeType:
 				for _, s := range a.spores {
 					if s.t == c.(SporeType) {
-						return false
+						if s.s == Unknown || s.s == Calculating {
+							cond := newCondition()
+							s.i.(Conditional).Condition(cond)
+							s.s = a.verifyCondition(s, cond)
+							if s.s == Invalid {
+								continue
+							}
+						}
+						return Invalid
 					}
 				}
 			default:
@@ -82,7 +106,15 @@ func (a *AppContext) verifyCondition(condition *Condition) bool {
 						panic("only interface can be specific by (*TypeInterface)(nil)")
 					}
 					if typeOf.Implements(reflect.TypeOf(c).Elem()) {
-						return false
+						if s.s == Unknown || s.s == Calculating {
+							cond := newCondition()
+							s.i.(Conditional).Condition(cond)
+							s.s = a.verifyCondition(s, cond)
+							if s.s == Invalid {
+								continue
+							}
+						}
+						return Invalid
 					}
 				}
 
@@ -97,6 +129,14 @@ func (a *AppContext) verifyCondition(condition *Condition) bool {
 			case SporeType:
 				for _, s := range a.spores {
 					if s.t == c.(SporeType) {
+						if s.s == Unknown || s.s == Calculating {
+							cond := newCondition()
+							s.i.(Conditional).Condition(cond)
+							s.s = a.verifyCondition(s, cond)
+							if s.s == Invalid {
+								continue
+							}
+						}
 						found = true
 					}
 				}
@@ -107,6 +147,14 @@ func (a *AppContext) verifyCondition(condition *Condition) bool {
 						panic("only interface can be specific by (*TypeInterface)(nil)")
 					}
 					if typeOf.Implements(reflect.TypeOf(c).Elem()) {
+						if s.s == Unknown || s.s == Calculating {
+							cond := newCondition()
+							s.i.(Conditional).Condition(cond)
+							s.s = a.verifyCondition(s, cond)
+							if s.s == Invalid {
+								continue
+							}
+						}
 						found = true
 					}
 				}
@@ -114,11 +162,16 @@ func (a *AppContext) verifyCondition(condition *Condition) bool {
 			}
 		}
 		if !found {
-			return false
+			return Invalid
 		}
 	}
 
-	return condition.matches(a)
+	r := condition.matches(a)
+	if r != Invalid && r != Valid {
+		panic("matches function must return Valid or Invalid! - " + spore.t)
+	}
+
+	return r
 }
 
 func (a *AppContext) GetGene() []Gene {

@@ -7,7 +7,7 @@ import (
 
 func (a *AppContext) inject() *AppContext {
 	for _, spore := range a.spores {
-		if !spore.v { //skip unqualified spore
+		if spore.s == Invalid { //skip unqualified spore
 			continue
 		}
 		tDst := reflect.TypeOf(spore.i).Elem()
